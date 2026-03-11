@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "Presence": {
+      "title": "Presence",
+      "description": "Tracks active users in the app",
+      "type": "object",
+      "properties": {
+        "lastActive": {
+          "type": "timestamp",
+          "description": "The last time the user was active"
+        }
+      },
+      "required": ["lastActive"]
+    },
+    "CommunityMood": {
+      "title": "CommunityMood",
+      "description": "A public feed of anonymized moods and recommended songs",
+      "type": "object",
+      "properties": {
+        "mood": {
+          "type": "string",
+          "description": "The user's mood"
+        },
+        "song": {
+          "type": "string",
+          "description": "The recommended song"
+        },
+        "artist": {
+          "type": "string",
+          "description": "The artist of the recommended song"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the mood was shared"
+        }
+      },
+      "required": ["mood", "song", "artist", "createdAt"]
+    },
+    "Journal": {
+      "title": "Journal",
+      "description": "User's personal journal entry and mood tracking",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The user's ID"
+        },
+        "mood": {
+          "type": "string",
+          "description": "The user's mood"
+        },
+        "moodScore": {
+          "type": "number",
+          "description": "A score from 1 to 10 representing the mood"
+        },
+        "entry": {
+          "type": "string",
+          "description": "The journal entry text"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the journal was created"
+        }
+      },
+      "required": ["userId", "mood", "moodScore", "entry", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/presence/{userId}": {
+      "schema": { "$ref": "#/entities/Presence" },
+      "description": "Active users"
+    },
+    "/communityMoods/{moodId}": {
+      "schema": { "$ref": "#/entities/CommunityMood" },
+      "description": "Public feed of moods and songs"
+    },
+    "/journals/{journalId}": {
+      "schema": { "$ref": "#/entities/Journal" },
+      "description": "User's personal journal entries"
+    }
+  }
+}

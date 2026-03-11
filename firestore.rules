@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: presence
+    // Document ID: {userId}
+    // Fields:
+    //   - lastActive: timestamp (required)
+    //
+    // Collection: communityMoods
+    // Document ID: {moodId}
+    // Fields:
+    //   - mood: string (required, max 50 chars)
+    //   - song: string (required, max 100 chars)
+    //   - artist: string (required, max 100 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: journals
+    // Document ID: {journalId}
+    // Fields:
+    //   - userId: string (required, max 100 chars)
+    //   - mood: string (required, max 50 chars)
+    //   - moodScore: number (required, 1-10)
+    //   - entry: string (required, max 2000 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) ||
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('userId' in request.resource.data) ||
+        request.resource.data.userId == resource.data.userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // Domain Validators
+    function isValidPresence() {
+      return hasOnlyAllowedFields(['lastActive']) &&
+             request.resource.data.lastActive is timestamp;
+    }
+
+    function isValidCommunityMood() {
+      return hasOnlyAllowedFields(['mood', 'song', 'artist', 'createdAt']) &&
+             validStringLength('mood', 1, 50) &&
+             validStringLength('song', 1, 100) &&
+             validStringLength('artist', 1, 100) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidJournal() {
+      return hasOnlyAllowedFields(['userId', 'mood', 'moodScore', 'entry', 'createdAt']) &&
+             validStringLength('userId', 1, 100) &&
+             validStringLength('mood', 1, 50) &&
+             request.resource.data.moodScore is number &&
+             request.resource.data.moodScore >= 1 &&
+             request.resource.data.moodScore <= 10 &&
+             validStringLength('entry', 1, 2000) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    // Rules
+    match /presence/{userId} {
+      // Anyone can read presence to get live counts
+      allow read: if true;
+      // Users can only create/update their own presence
+      allow create: if isOwner(userId) && isValidPresence();
+      allow update: if isOwner(userId) && isValidPresence();
+      allow delete: if isOwner(userId);
+    }
+
+    match /communityMoods/{moodId} {
+      // Anyone can read the community feed
+      allow read: if true;
+      // Anyone authenticated can create a mood
+      allow create: if isAuthenticated() && isValidCommunityMood();
+      // No updates or deletes allowed for community moods to keep it simple and secure
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /journals/{journalId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidJournal() && uidUnchanged();
+      allow update: if isDocOwner() && isValidJournal() && uidNotModified() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner();
+    }
+  }
+}
