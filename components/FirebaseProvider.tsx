@@ -1,21 +1,27 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut } from 'firebase/auth';
+import {
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut
+} from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 interface FirebaseContextType {
   user: User | null;
   isAuthReady: boolean;
-  signIn: () => Promise<void>;
+  signIn: () => void;
   logOut: () => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
   user: null,
   isAuthReady: false,
-  signIn: async () => {},
+  signIn: () => {},
   logOut: async () => {},
 });
 
@@ -28,11 +34,6 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    // Handle the result after Google redirects back to the app
-    getRedirectResult(auth).catch((error) => {
-      console.error("Redirect sign-in error", error);
-    });
-
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
@@ -43,7 +44,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
             lastActive: serverTimestamp()
           });
         } catch (error) {
-          console.error("Failed to update presence", error);
+          console.error('Failed to update presence:', error);
         }
       }
     });
@@ -51,7 +52,7 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // Update presence periodically
+  // Update presence every minute while logged in
   useEffect(() => {
     if (!user || !isAuthReady) return;
 
@@ -61,27 +62,30 @@ export function FirebaseProvider({ children }: { children: React.ReactNode }) {
           lastActive: serverTimestamp()
         });
       } catch (error) {
-        console.error("Failed to update presence", error);
+        console.error('Failed to update presence:', error);
       }
     }, 60000);
 
     return () => clearInterval(interval);
   }, [user, isAuthReady]);
 
-  const signIn = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
-    } catch (error) {
-      console.error("Error signing in", error);
-    }
+  // signIn is a plain synchronous function — NOT async
+  // This is critical: popup must be triggered directly from user click
+  // with zero async delay, otherwise browsers block it
+  const signIn = () => {
+    const provider = new GoogleAuthProvider();
+    provider.addScope('email');
+    provider.addScope('profile');
+    signInWithPopup(auth, provider).catch((error) => {
+      console.error('Sign in error:', error.code, error.message);
+    });
   };
 
   const logOut = async () => {
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Error signing out", error);
+      console.error('Error signing out:', error);
     }
   };
 
